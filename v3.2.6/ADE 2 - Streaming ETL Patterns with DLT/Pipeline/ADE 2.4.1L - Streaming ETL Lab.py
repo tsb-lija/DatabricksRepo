@@ -60,6 +60,19 @@ import pyspark.sql.functions as F
 
 workouts_schema = "user_id INT, workout_id INT, timestamp FLOAT, action STRING, session_id INT"
 
+@dlt.table(
+    table_properties = {
+        "quality": "bronze"
+    }
+)
+def workouts_bronze():
+    return (
+        dlt
+            .read_stream("bronze")
+            .filter("topic = 'workout'")
+            .select(F.from_json(F.col("value").cast("string"), workouts_schema).alias("v"))
+            .select("v.*")
+    )
 
 # COMMAND ----------
 
@@ -85,7 +98,25 @@ workouts_schema = "user_id INT, workout_id INT, timestamp FLOAT, action STRING, 
 
 # COMMAND ----------
 
-# TODO
+rules = {
+    "user_id_not_null": "user_id IS NOT NULL",
+    "workout_id_not_null": "workout_id IS NOT NULL"
+}
+
+@dlt.table(
+    table_properties={
+        "quality": "silver"
+    }
+)
+@dlt.expect_all_or_drop(rules)
+def workouts_silver():
+    return (
+        dlt
+            .read("workouts_bronze")
+            .withColumn("timestamp", F.col("timestamp").cast("timestamp"))
+            .withColumnRenamed("timestamp", "time")
+            .drop_duplicates(["user_id", "time"])
+    )
 
 # COMMAND ----------
 
@@ -98,7 +129,16 @@ workouts_schema = "user_id INT, workout_id INT, timestamp FLOAT, action STRING, 
 
 # COMMAND ----------
 
-# TODO
+quarantine_rules = {
+    "invalid_record": f"NOT({' AND '.join(rules.values())})"
+}
+
+@dlt.table
+@dlt.expect_all_or_drop(quarantine_rules)
+def workouts_quarantine():
+    return (
+        dlt.read_stream("workouts_bronze")
+    )
 
 # COMMAND ----------
 

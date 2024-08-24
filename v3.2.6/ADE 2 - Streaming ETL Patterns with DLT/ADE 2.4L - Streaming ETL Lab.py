@@ -111,7 +111,7 @@ DA.start_pipeline()  # Trigger another pipeline update
 
 # COMMAND ----------
 
-# DA.cleanup()
+DA.cleanup()
 
 # COMMAND ----------
 
